@@ -1,0 +1,905 @@
+﻿{
+  "updatedAt": "2026-02-21T04:54:18.402Z",
+  "createdAt": "2026-01-17T07:52:38.401Z",
+  "id": "xj1fEgEczbgPBWMVo4txH",
+  "name": "ASMR AI Video Creator",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 11
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1072,
+        192
+      ],
+      "id": "bf288609-4947-48c6-b6bd-2f9a3f89c4b7",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        400
+      ],
+      "id": "7b04c0d8-df9f-479f-84e0-fe2400966744",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "bnWuczVvju0eygwv",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=### ROLE\nYou are a Creative Director for a 3D Animation Studio.\n\n### INPUT\nI will provide an image of a real product and its details.\n\n**Product Name**: {{ $('Get row(s) in sheet').item.json['Product Name'] }}\n**Product Details**: {{ $('Get row(s) in sheet').item.json['Product Details'] }}\n\n### TASK\n1.  **Analyze the Product:** Identify key visual features (color, shape, packaging).\n2.  **Generate `image_prompt`:** Create a text-to-image prompt to recreate this product as a **\"Cute 3D Cartoon Character\"** in a Pixar/Disney style. It must look like the original product but alive.\n    *   *Style:* 3D render, octane render, cute, vibrant, soft lighting, 4k.\n3.  **Generate `animation_prompt`:** Instructions for an AI Video Generator (Veo) to animate the cartoon image you just described.\n    *   *Action:* The product should be jumping, dancing, or reacting to its own popularity.\n4.  **Generate `script`:** A funny 15s monologue where the product complains about being too popular.\n\n### OUTPUT JSON FORMAT\n{\n  \"script\": \"The 15s dialogue...\",\n  \"videoTitle\": \"Short viral title\",\n  \"videoDescription\": \"YouTube/Facebook caption with hashtags\",\n  \"image_prompt\": \"A cute 3D cartoon character version of [Product Name]. It has [Features]. High quality 3D render, Pixar style, studio lighting, plain background.\",\n  \"animation_prompt\": \"The 3D cartoon character is jumping excitedly. It waves its arms. Cinematic lighting, 4k, 60fps.\"\n}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -160,
+        192
+      ],
+      "id": "02acc80f-f40f-482b-a489-421f60df0b43",
+      "name": "Generate Prompts"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the text output from the LLM Chain\nconst llmOutput = items[0].json.text; \n\n// 1. Clean the output using Regex to find the JSON object { ... }\nconst jsonMatch = llmOutput.match(/\\{[\\s\\S]*\\}/);\n\nif (jsonMatch) {\n  try {\n    // 2. Parse the extracted JSON string\n    const parsedData = JSON.parse(jsonMatch[0]);\n    \n    // 3. Return the clean data mapped to your keys\n    return [\n      {\n        json: {\n          image_prompt: parsedData.image_prompt,\n          animation_prompt: parsedData.animation_prompt,\n          videoTitle: parsedData.videoTitle,\n          videoDescription: parsedData.videoDescription,\n          script: parsedData.script\n        }\n      }\n    ];\n  } catch (error) {\n    throw new Error(\"Found JSON-like text but failed to parse it. Check for invalid characters.\");\n  }\n} else {\n  throw new Error(\"No JSON object found in the LLM response.\");\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        176
+      ],
+      "id": "b860f9a2-0d51-479c-bd42-640defdb9c94",
+      "name": "Output Parser"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.replicate.com/v1/predictions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Token YOUR_REPLICATE_API_TOKEN_HERE"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"version\": \"black-forest-labs/flux-dev:6e4a938f85952bdabcc15aa329178c4d681c52bf25a0342403287dc26944661d\",\n  \"input\": {\n    \"prompt\": \"{{ $('Output Parser').item.json.image_prompt }}\",\n    \"aspect_ratio\": \"9:16\",\n    \"output_format\": \"png\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        416,
+        176
+      ],
+      "id": "nano-banana-generate",
+      "name": "Generate Cartoon Image"
+    },
+    {
+      "parameters": {
+        "amount": 10000,
+        "unit": "milliseconds"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        640,
+        176
+      ],
+      "id": "wait-for-image",
+      "name": "Wait for Image",
+      "webhookId": "a0312f4a-89cd-40c7-b516-8197a8aeb51d"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.output[0] }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        848,
+        176
+      ],
+      "id": "download-cartoon-image",
+      "name": "Download Cartoon Image"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n  \"type\": \"service_account\",\n  \"project_id\": \"asmr-content-creator-484610\",\n  \"private_key_id\": \"7c27e6340a06ddf9d74e89127ea7cc46ccfd9950\",\n  \"client_email\": \"asmr-ai-video@asmr-content-creator-484610.iam.gserviceaccount.com\",\n  \"client_id\": \"104916833572349464322\",\n  \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\",\n  \"token_uri\": \"https://oauth2.googleapis.com/token\",\n  \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\",\n  \"client_x509_cert_url\": \"https://www.googleapis.com/robot/v1/metadata/x509/asmr-ai-video%40asmr-content-creator-484610.iam.gserviceaccount.com\",\n  \"universe_domain\": \"googleapis.com\"\n}\n]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        176
+      ],
+      "id": "bce8c164-6958-4c8f-8f07-b66fd8573fc8",
+      "name": "Secret Payload"
+    },
+    {
+      "parameters": {
+        "useJson": true,
+        "claimsJson": "={\n\"iss\": \"{{ $json.client_email }}\",\n\"scope\": \"https://www.googleapis.com/auth/cloud-platform\",\n\"aud\": \"https://oauth2.googleapis.com/token\",\n\"iat\": {{ Math.floor($now.toSeconds()) }},\n\"exp\": {{ Math.floor($now.plus({ seconds: 3600 }).toSeconds()) }}\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.jwt",
+      "typeVersion": 1,
+      "position": [
+        1296,
+        176
+      ],
+      "id": "bfcfa351-b5ea-4731-9f1c-57c607c83508",
+      "name": "JWT",
+      "credentials": {
+        "jwtAuth": {
+          "id": "WkgY0Cn1Yv7MsZBs",
+          "name": "JWT Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://oauth2.googleapis.com/token",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "urn:ietf:params:oauth:grant-type:jwt-bearer"
+            },
+            {
+              "name": "assertion",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1520,
+        176
+      ],
+      "id": "e8b3cfa8-d4b3-4152-97b3-7ee097941328",
+      "name": "Exchange JWT for Access Token"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://us-central1-aiplatform.googleapis.com/v1/projects/asmr-content-creator-484610/locations/us-central1/publishers/google/models/veo-3.0-generate-preview:predictLongRunning",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"instances\": [\n    {\n      \"prompt\": \"{{ $('Output Parser').item.json.animation_prompt }}\",\n      \"image\": {\n        \"bytesBase64Encoded\": \"{{ $('Download Cartoon Image').item.binary.data.data }}\"\n      }\n    }\n  ],\n  \"parameters\": {\n    \"aspectRatio\": \"9:16\",\n    \"durationSeconds\": 8,\n    \"generateAudio\": true,\n    \"negativePrompt\": \"UI, overlays, captions, on-screen buttons, phone interface, subtitles, mentions\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1728,
+        176
+      ],
+      "id": "a7489542-30aa-42b6-bfa9-c3fbb7ea3160",
+      "name": "Generate Video (Image-to-Video)"
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1952,
+        112
+      ],
+      "id": "bdd3f7e1-6397-42f8-a63d-5ae6cfed9f0a",
+      "name": "Wait",
+      "webhookId": "0be6f9f5-cbfa-4aa6-970c-da766235ad67"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://us-central1-aiplatform.googleapis.com/v1/projects/asmr-content-creator-484610/locations/us-central1/publishers/google/models/veo-3.0-generate-preview:fetchPredictOperation",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Exchange JWT for Access Token').item.json.access_token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "operationName",
+              "value": "={{ $('Generate Video (Image-to-Video)').item.json.name }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2176,
+        32
+      ],
+      "id": "b961494f-2cd7-4724-8111-e9abf2ed45af",
+      "name": "Get Generated Video"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "419531ea-22c0-4244-bce6-8abcea0b6f40",
+              "leftValue": "={{ $json.body.done }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2400,
+        112
+      ],
+      "id": "cb9476bd-0eeb-4d66-8f7f-ea7704c89327",
+      "name": "isDone?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "38693f0b-3d92-44cb-b986-1eccbcaadca6",
+              "leftValue": "={{ $json.body.response.raiMediaFilteredReasons }}",
+              "rightValue": "exist",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2608,
+        112
+      ],
+      "id": "680985bd-2d61-4b08-8880-07beb9596eae",
+      "name": "isFiltered?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "def4ecfc-f6b1-456d-a6b0-d49c7df6843d",
+              "leftValue": "={{  $json.body.error }}",
+              "rightValue": "exist",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2832,
+        176
+      ],
+      "id": "b4b64e5d-f9bd-453b-b791-dcbcbf7b8054",
+      "name": "isError?"
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "body.response.videos[0].bytesBase64Encoded",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        3056,
+        176
+      ],
+      "id": "e875bcdf-282b-4094-a7df-2ffcddc19b60",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $('Output Parser').item.json.videoTitle }}",
+        "regionCode": "PH",
+        "categoryId": "1",
+        "options": {
+          "description": "={{ $('Output Parser').item.json.videoDescription }}"
+        }
+      },
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [
+        3280,
+        272
+      ],
+      "id": "a6609729-aa44-4f68-8e4d-cc515d000ca0",
+      "name": "Upload a video",
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "nFYHs36IqAIm7mDL",
+          "name": "YouTube account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "hostUrl": "graph-video.facebook.com",
+        "httpRequestMethod": "POST",
+        "graphApiVersion": "v23.0",
+        "node": "me",
+        "edge": "videos",
+        "sendBinaryData": true,
+        "binaryPropertyName": "data",
+        "options": {
+          "queryParameters": {
+            "parameter": [
+              {
+                "name": "description",
+                "value": "={{ $('Output Parser').item.json.videoDescription }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "typeVersion": 1,
+      "position": [
+        3280,
+        80
+      ],
+      "id": "94da4c97-9284-4fc4-9ed6-3abf3f26483e",
+      "name": "Facebook Graph API",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "PXOrbVJ7sWNj579q",
+          "name": "Unnamed credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "ENTER_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Status": "Done"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        3488,
+        176
+      ],
+      "id": "google-sheets-update-done",
+      "name": "Update Status to Done",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "806vT8Uldd8irx40",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1jqtgF80CQiphgIVe4KKEv6tSK4wtOZ7XRoQgF6fRfSs",
+          "mode": "list",
+          "cachedResultName": "ASMR_Product_Template",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jqtgF80CQiphgIVe4KKEv6tSK4wtOZ7XRoQgF6fRfSs/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 923158278,
+          "mode": "list",
+          "cachedResultName": "Product Queue",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jqtgF80CQiphgIVe4KKEv6tSK4wtOZ7XRoQgF6fRfSs/edit#gid=923158278"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -576,
+        192
+      ],
+      "id": "e090bd01-cfbb-4305-bfff-e33c2f817d58",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "806vT8Uldd8irx40",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json['Image URL'] }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -368,
+        192
+      ],
+      "id": "e395cd35-3785-4129-88da-f2b521c673e9",
+      "name": "HTTP Request",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait (Throttle)": {
+      "main": [
+        [
+          {
+            "node": "Download Product Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Prompts",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Prompts": {
+      "main": [
+        [
+          {
+            "node": "Output Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Output Parser": {
+      "main": [
+        [
+          {
+            "node": "Generate Cartoon Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Cartoon Image": {
+      "main": [
+        [
+          {
+            "node": "Wait for Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Image": {
+      "main": [
+        [
+          {
+            "node": "Download Cartoon Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Cartoon Image": {
+      "main": [
+        [
+          {
+            "node": "Secret Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Secret Payload": {
+      "main": [
+        [
+          {
+            "node": "JWT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JWT": {
+      "main": [
+        [
+          {
+            "node": "Exchange JWT for Access Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exchange JWT for Access Token": {
+      "main": [
+        [
+          {
+            "node": "Generate Video (Image-to-Video)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Video (Image-to-Video)": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Get Generated Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Generated Video": {
+      "main": [
+        [
+          {
+            "node": "isDone?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "isDone?": {
+      "main": [
+        [
+          {
+            "node": "isFiltered?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "isFiltered?": {
+      "main": [
+        [
+          {
+            "node": "Generate Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "isError?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "isError?": {
+      "main": [
+        [
+          {
+            "node": "Generate Video (Image-to-Video)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Upload a video",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Facebook Graph API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload a video": {
+      "main": [
+        [
+          {
+            "node": "Update Status to Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook Graph API": {
+      "main": [
+        [
+          {
+            "node": "Update Status to Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Generate Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "timezone": "Asia/Singapore",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "8fbf360b-c719-4c4f-8d71-fa4720a133d2",
+  "activeVersionId": null,
+  "versionCounter": 56,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-01-17T07:52:38.404Z",
+      "createdAt": "2026-01-17T07:52:38.404Z",
+      "role": "workflow:owner",
+      "workflowId": "xj1fEgEczbgPBWMVo4txH",
+      "projectId": "yKjt8yR0BySw9XdO",
+      "project": {
+        "updatedAt": "2026-01-13T10:57:33.685Z",
+        "createdAt": "2026-01-13T10:26:38.667Z",
+        "id": "yKjt8yR0BySw9XdO",
+        "name": "Sean Myk Daniel Jacinto <seanmykjacinto17@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "ceae3c03-5d85-4bb3-90f7-fec822adfae8",
+        "projectRelations": [
+          {
+            "updatedAt": "2026-01-13T10:26:38.667Z",
+            "createdAt": "2026-01-13T10:26:38.667Z",
+            "userId": "ceae3c03-5d85-4bb3-90f7-fec822adfae8",
+            "projectId": "yKjt8yR0BySw9XdO",
+            "user": {
+              "updatedAt": "2026-02-21T01:31:37.000Z",
+              "createdAt": "2026-01-13T10:26:38.444Z",
+              "id": "ceae3c03-5d85-4bb3-90f7-fec822adfae8",
+              "email": "seanmykjacinto17@gmail.com",
+              "firstName": "Sean Myk Daniel",
+              "lastName": "Jacinto",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2026-01-13T10:57:50.629Z",
+                "personalization_survey_n8n_version": "2.3.2",
+                "companyType": "personal",
+                "reportedSource": "friend"
+              },
+              "settings": {
+                "userActivated": true,
+                "easyAIWorkflowOnboarded": true,
+                "firstSuccessfulWorkflowId": "i1v_xY7vc0PVzRnO39qBb",
+                "userActivatedAt": 1768475305683
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-02-21",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}
